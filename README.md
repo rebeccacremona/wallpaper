@@ -4,7 +4,8 @@ A macOS Tahoe (26) tool that automatically cycles your desktop wallpaper between
 the four time-of-day Tahoe ocean variants based on local sunrise/sunset.
 
 Claude wrote it. I provided lots of instruction and feedback. I have not read much
-of the source.
+of the source. I have tested it fairly thoroughly on my own laptop, and really had
+a LOT of opinions about how it ought to work.
 
 This repo is the source-of-truth for the shareable end-user bundle. Build
 artifacts (a single zip) are produced via `./build_zip.sh`.
