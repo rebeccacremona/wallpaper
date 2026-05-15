@@ -1,0 +1,8 @@
+# Per-Mac generated state from running Install.command from the repo.
+bundle/_Private/
+
+# Build artifacts.
+Aerial Switcher Shareable.zip
+
+# macOS noise.
+.DS_Store
