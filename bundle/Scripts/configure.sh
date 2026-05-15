@@ -13,18 +13,37 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/common.sh
 source "$HERE/lib/common.sh"
 
-NEW_CONFIG="$(mktemp "$STATE/config.env.new.XXXXXX" 2>/dev/null \
-  || mktemp -t config.env.new.XXXXXX)"
 mkdir -p "$STATE" 2>/dev/null || true
-trap 'rm -f "$NEW_CONFIG"' EXIT
+NEW_USER_CONFIG="$(mktemp "$STATE/user_config.env.new.XXXXXX" 2>/dev/null \
+  || mktemp -t user_config.env.new.XXXXXX)"
+trap 'rm -f "$NEW_USER_CONFIG"' EXIT
 
-cp "$CONFIG" "$NEW_CONFIG"
+# Start the override file from the existing one if present, otherwise
+# from a header-only stub. The override file lives in _Private/State
+# and is sourced AFTER the shipped defaults in Scripts/lib/config.env.
+if [[ -f "$USER_CONFIG" ]]; then
+  cp "$USER_CONFIG" "$NEW_USER_CONFIG"
+else
+  cat > "$NEW_USER_CONFIG" <<'HEADER'
+# Tahoe Aerial Switcher -- user overrides for THIS Mac.
+#
+# Auto-managed by Change Settings.command. Keys here override the
+# shipped defaults in Scripts/lib/config.env. Safe to delete this
+# whole file to revert to shipped defaults.
 
-# update_kv NEW_CONFIG KEY VALUE
+HEADER
+fi
+
+# update_kv FILE KEY VALUE -- in-place if present, else appended.
+# Escapes backslash, the sed delimiter (|), and the sed-replacement
+# special (&) in VALUE so values with arbitrary characters from a
+# geocoding response can't break the substitution.
 update_kv() {
   local file="$1" key="$2" value="$3"
+  local esc
+  esc="$(printf '%s' "$value" | sed -e 's/[\\|&]/\\&/g')"
   if grep -qE "^${key}=" "$file"; then
-    sed -i '' -E "s|^${key}=.*|${key}=${value}|" "$file"
+    sed -i '' -E "s|^${key}=.*|${key}=${esc}|" "$file"
   else
     printf '%s=%s\n' "$key" "$value" >> "$file"
   fi
@@ -97,16 +116,26 @@ if [[ -n "$city_input" ]]; then
 
   if ! response=$(curl -fsSL --max-time 8 "$api" 2>/dev/null); then
     echo "Could not reach the geocoding service. Skipping location update."
+    echo "(Check your internet connection and try again.)"
     response=''
   fi
 
   if [[ -n "$response" ]]; then
-    options=$(/usr/bin/python3 - <<PY
+    # Pass the response as argv (not stdin) -- with `python3 -`, stdin is
+    # already taken by the heredoc-supplied script, so any pipe to stdin
+    # gets discarded. Argv has no such conflict, and bash quotes it
+    # safely even with arbitrary characters in the JSON body.
+    # We also briefly disable `set -e` around the assignment, because
+    # parse_status=2 would otherwise kill the script before we read it.
+    set +e
+    options=$(/usr/bin/python3 - "$response" <<'PY'
 import json, sys
 try:
-    data = json.loads('''$response''')
+    data = json.loads(sys.argv[1])
 except Exception:
-    sys.exit(1)
+    sys.exit(2)
+if not isinstance(data, dict):
+    sys.exit(2)
 results = data.get('results') or []
 for i, r in enumerate(results, 1):
     parts = [r.get('name'), r.get('admin1'), r.get('country')]
@@ -114,8 +143,14 @@ for i, r in enumerate(results, 1):
     print(f"{i}|{label}|{r.get('latitude')}|{r.get('longitude')}|{r.get('timezone')}")
 PY
     )
+    parse_status=$?
+    set -e
 
-    if [[ -z "$options" ]]; then
+    if (( parse_status == 2 )); then
+      echo "The geocoding service returned an unexpected response."
+      echo "(Try again, or pick another time -- the rest of your settings"
+      echo " can still be changed.)"
+    elif [[ -z "$options" ]]; then
       echo "No matches for '$city_input'. Keeping current location."
     else
       echo
@@ -137,15 +172,17 @@ PY
           new_lng=$(echo "$chosen" | awk -F'|' '{print $4}')
           new_tz=$(echo "$chosen" | awk -F'|' '{print $5}')
           echo "Selected: $new_label"
-          update_kv "$NEW_CONFIG" LAT "$(quoted "$new_lat")"
-          update_kv "$NEW_CONFIG" LNG "$(quoted "$new_lng")"
-          update_kv "$NEW_CONFIG" TZ "$(quoted "$new_tz")"
-          update_kv "$NEW_CONFIG" LOCATION_LABEL "$(quoted "$new_label")"
+          update_kv "$NEW_USER_CONFIG" LAT "$(quoted "$new_lat")"
+          update_kv "$NEW_USER_CONFIG" LNG "$(quoted "$new_lng")"
+          update_kv "$NEW_USER_CONFIG" TZ "$(quoted "$new_tz")"
+          update_kv "$NEW_USER_CONFIG" LOCATION_LABEL "$(quoted "$new_label")"
         fi
       fi
     fi
   fi
 fi
+
+divider
 
 # ---------- Schedule preset ----------
 
@@ -183,11 +220,13 @@ case "$preset" in
 esac
 
 if [[ -n "$M" ]]; then
-  update_kv "$NEW_CONFIG" MORNING_OFFSET_MIN "$M"
-  update_kv "$NEW_CONFIG" DAY_OFFSET_MIN     "$D"
-  update_kv "$NEW_CONFIG" EVENING_OFFSET_MIN "$E"
-  update_kv "$NEW_CONFIG" NIGHT_OFFSET_MIN   "$N"
+  update_kv "$NEW_USER_CONFIG" MORNING_OFFSET_MIN "$M"
+  update_kv "$NEW_USER_CONFIG" DAY_OFFSET_MIN     "$D"
+  update_kv "$NEW_USER_CONFIG" EVENING_OFFSET_MIN "$E"
+  update_kv "$NEW_USER_CONFIG" NIGHT_OFFSET_MIN   "$N"
 fi
+
+divider
 
 # ---------- Check frequency ----------
 
@@ -214,19 +253,23 @@ case "$freq" in
 esac
 
 if [[ -n "$interval" ]]; then
-  update_kv "$NEW_CONFIG" CHECK_INTERVAL_SECONDS "$interval"
+  update_kv "$NEW_USER_CONFIG" CHECK_INTERVAL_SECONDS "$interval"
 fi
+
+divider
 
 # ---------- Confirm + apply ----------
 
 cat <<'SUMMARY'
-
-------------------------------------------------------------
-New settings:
+Your overrides (these will win over the shipped defaults):
 SUMMARY
-grep -E '^(LAT|LNG|TZ|MORNING|DAY|EVENING|NIGHT|CHECK)' "$NEW_CONFIG" \
-  | sed 's/^/  /'
-echo "------------------------------------------------------------"
+if grep -qE '^(LAT|LNG|TZ|LOCATION_LABEL|MORNING|DAY|EVENING|NIGHT|CHECK)' \
+    "$NEW_USER_CONFIG"; then
+  grep -E '^(LAT|LNG|TZ|LOCATION_LABEL|MORNING|DAY|EVENING|NIGHT|CHECK)' \
+    "$NEW_USER_CONFIG" | sed 's/^/  /'
+else
+  echo "  (none -- using all shipped defaults)"
+fi
 echo
 
 read -r -p "Save these settings? (Y/n): " save
@@ -237,9 +280,10 @@ if [[ ! "$save" =~ ^[Yy] ]]; then
   exit 0
 fi
 
-mv "$NEW_CONFIG" "$CONFIG"
+mv "$NEW_USER_CONFIG" "$USER_CONFIG"
 trap - EXIT
-echo "Saved to $CONFIG."
+echo "Saved overrides to $USER_CONFIG"
+echo "(Shipped defaults in $CONFIG are untouched.)"
 
 # When invoked from Install.command, just exit -- the caller will apply.
 if [[ "${CONFIGURE_FROM_INSTALL:-}" == "1" ]]; then

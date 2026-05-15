@@ -33,6 +33,15 @@ BACKUPS="$PRIVATE/Backups"
 PROFILES="$PRIVATE/Profiles"
 STATE="$PRIVATE/State"
 
+# User-specific overrides (created by Change Settings.command). Sourced
+# after the shipped defaults so any keys it sets win. Absence is fine --
+# fresh installs and unconfigured recipients use the shipped defaults.
+USER_CONFIG="$STATE/user_config.env"
+if [[ -f "$USER_CONFIG" ]]; then
+  # shellcheck disable=SC1090
+  source "$USER_CONFIG"
+fi
+
 SUN_FILE="$STATE/sun_times.env"
 LAST_PROFILE_FILE="$STATE/last_applied_profile"
 
@@ -46,6 +55,13 @@ WALLPAPER_INDEX="$WALLPAPER_STORE_DIR/Store/Index.plist"
 
 log() {
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
+}
+
+# Visual section divider for Controls and the installer. Use between
+# major chunks of output so the user can see "I'm now in a new step."
+# 60 chars, plain ASCII, blank-line padded.
+divider() {
+  printf '\n------------------------------------------------------------\n\n'
 }
 
 ensure_private_dirs() {

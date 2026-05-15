@@ -12,8 +12,9 @@ artifacts (a single zip) are produced via `./build_zip.sh`.
 .
 ├── README.md                 # this file (dev/repo)
 ├── design/
-│   ├── chatgpt_initial_plan.md   # initial plan from ChatGPT (preserved verbatim)
-│   └── revisions.md              # what we changed and why
+│   ├── chatgpt_initial_plan.md       # initial plan from ChatGPT (preserved verbatim)
+│   ├── revisions.md                  # end design vs original plan, themed by topic
+│   └── caveats_and_future_work.md    # Tahoe-specific caveats, residual risks, open questions
 ├── build_zip.sh              # produces "Aerial Switcher Shareable.zip"
 └── bundle/                   # the shareable folder (becomes "Aerial Switcher/" in the zip)
     ├── README.txt            # end-user docs (shipped in the zip)
@@ -48,21 +49,25 @@ LaunchAgent if you move the repo later, just re-run `Install.command`.
 
 ## How configuration works
 
-End users have two paths:
+Two-file model:
 
-1. **Interactive (recommended):** double-click `Controls/Change Settings.command`.
-   Prompts for city (geocoded online via the free Open-Meteo API),
-   schedule preset (short / normal / long), and check frequency
-   (5 / 15 / 30 min). Writes to `config.env` atomically and offers to
-   reapply via Install.command.
-2. **Manual:** edit `bundle/Scripts/lib/config.env` directly. Keys are
-   `LAT`, `LNG`, `TZ`, `MORNING_OFFSET_MIN`, `DAY_OFFSET_MIN`,
-   `EVENING_OFFSET_MIN`, `NIGHT_OFFSET_MIN`, `LABEL_SUFFIX`, and
-   `CHECK_INTERVAL_SECONDS`. Window offsets are minutes relative to
-   sunrise/sunset (negative = before). Then re-run `Install.command`.
+- `bundle/Scripts/lib/config.env` is the **shipped defaults**. Travels
+  with the bundle. Boston / Normal preset / 15-min check by default.
+  Edit only if you want to change what *every* recipient gets.
+- `bundle/_Private/State/user_config.env` is the **per-Mac user override**.
+  Auto-managed by `Controls/Change Settings.command`. Sourced after the
+  shipped defaults so any keys it sets win. Lives under `_Private/` so
+  it's never shipped in the zip.
+
+End users typically use Change Settings (interactive: city geocoding +
+schedule preset + check frequency), which only writes the keys they
+actually changed into `user_config.env`. Manual hand-editing of
+`user_config.env` works too. The shipped `config.env` should generally
+be left alone unless you're updating defaults for everyone.
 
 `Install.command` is idempotent: re-running it only re-prompts for
-wallpaper capture if profiles are missing.
+wallpaper capture if profiles are missing. After any config change,
+re-run it to rewrite the LaunchAgent and reload.
 
 ## How wallpaper switching works
 
@@ -78,8 +83,9 @@ Tahoe variant). The dispatcher swaps in the matching snapshot and reloads
 Sequoia → Tahoe; there is no documented Apple API for setting aerial
 wallpapers programmatically.
 
-See [`design/revisions.md`](design/revisions.md) for the full rationale and
-the explicit set of trade-offs we accepted.
+See [`design/revisions.md`](design/revisions.md) for the rationale and
+the explicit set of trade-offs we accepted. Tahoe-specific caveats and
+residual risks live in [`design/caveats_and_future_work.md`](design/caveats_and_future_work.md).
 
 ## Recovery
 
@@ -95,8 +101,8 @@ Three layers, escalating:
 
 ## Caveats
 
-See `bundle/README.txt` and `design/revisions.md` for the full discussion.
-Short list:
+See [`design/caveats_and_future_work.md`](design/caveats_and_future_work.md)
+for the full discussion. Short list:
 
 - Pokes a private macOS file; future point releases could break things.
 - Brief desktop flash on each switch (WallpaperAgent reload).

@@ -16,7 +16,8 @@ What this will do:
 
   1. Snapshot your current wallpaper system state for forensics
      (into _Private/Backups/wallpaper-state-<timestamp>/).
-  2. Quit WallpaperAgent.
+  2. Stop the background switcher (so the old captured profiles
+     don't immediately get re-applied) and quit WallpaperAgent.
   3. Move ~/Library/Application Support/com.apple.wallpaper/Store/Index.plist
      aside (renamed, NOT deleted, in case you need it later).
   4. Clear the dispatcher's "last applied profile" memory.
@@ -26,22 +27,24 @@ After this, macOS will regenerate Index.plist from defaults the next
 time you open System Settings -> Wallpaper. Pick a wallpaper there to
 confirm things are working again.
 
-This does NOT uninstall the switcher. Your captured profiles, the
-LaunchAgent, and the rest of the setup all stay in place. To start
-using the switcher again afterwards, re-run Capture Wallpaper
-Profiles.command (since the previous captures may be why things
-broke).
+This does NOT uninstall the switcher. Your captured profiles and the
+rest of the setup all stay in place -- but the background helper is
+turned OFF until you explicitly turn it back on (after re-capturing,
+since the previous captures may be why things broke).
 
 This action is reversible -- nothing is deleted, only moved aside.
 
 BANNER
 
-read -r -p "Type RESET to continue (anything else cancels): " confirm
-if [[ "$confirm" != "RESET" ]]; then
+read -r -p "Continue? (y/N): " confirm
+confirm="${confirm:-N}"
+if [[ ! "$confirm" =~ ^[Yy] ]]; then
   echo
   echo "Cancelled. Nothing changed."
   exit 0
 fi
+
+divider
 
 ts="$(date +%Y%m%d-%H%M%S)"
 SNAPSHOT_DIR="$BACKUPS/wallpaper-state-${ts}"
@@ -54,6 +57,9 @@ if [[ -d "$WALLPAPER_STORE_DIR" ]]; then
 else
   echo "No existing wallpaper store directory to snapshot (that's fine)."
 fi
+
+echo "Stopping the background switcher (so it doesn't re-apply old captures)..."
+launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 
 echo "Quitting WallpaperAgent..."
 killall WallpaperAgent 2>/dev/null || true
@@ -77,14 +83,26 @@ fi
 sleep 1
 killall WallpaperAgent 2>/dev/null || true
 
-cat <<'NEXT'
+divider
 
-Done.
+cat <<'NEXT'
+Done. The background switcher is now OFF.
 
 Next steps:
 
-  - Open System Settings -> Wallpaper and select any wallpaper. macOS
-    will regenerate Index.plist from defaults.
-  - If you want to keep using the switcher, then re-run:
-        Capture Wallpaper Profiles.command
+  1. Open System Settings -> Wallpaper and select any wallpaper.
+     macOS will regenerate Index.plist from defaults.
+
+  Then choose ONE of:
+
+  2a. Keep using the switcher. Double-click:
+         Capture Wallpaper Profiles.command
+      to save fresh profiles for each Tahoe variant, then:
+         Turn On.command
+      to start the switcher again.
+
+  2b. You're done with the switcher. Double-click:
+         Uninstall.command
+      to remove it entirely (this will move the whole folder to
+      the Trash and remove the background helper).
 NEXT

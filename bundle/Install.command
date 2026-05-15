@@ -75,26 +75,31 @@ Evening, and Night) based on the sun in your area.
 Setup is two steps:
 
   1. (Optional) Tell me your city and how long you'd like the morning
-     and evening transitions to feel.
+     and evening transitions to feel. If you skip this, I'll use:
+         - Location:  Boston, Massachusetts (America/New_York)
+         - Schedule:  Normal -- morning ~30 min before sunrise to
+                      ~2 hr after, evening ~90 min before sunset to
+                      ~2 hr after
+         - Check:     every 15 minutes while your Mac is awake
+     You can always change any of these later via the Controls folder.
+
   2. Pick each Tahoe ocean wallpaper in System Settings, one at a
      time. I'll save a snapshot after each.
 
 Then I'll start a small background helper that switches your wallpaper
-four times a day automatically. You can change anything later from the
-Controls folder.
+four times a day automatically.
 
 WELCOME
 
   read -r -p "Customize your location and schedule first? (y/N): " want_config
   want_config="${want_config:-N}"
   if [[ "$want_config" =~ ^[Yy] ]]; then
-    echo
+    divider
     # Tell configure.sh not to ask "Apply now?" or re-exec Install --
     # we'll handle the apply ourselves below.
     CONFIGURE_FROM_INSTALL=1 "$SCRIPTS/configure.sh"
     # Re-source common.sh so we pick up any LAT/LNG/TZ/CHECK_INTERVAL changes.
     source "$SCRIPTS/lib/common.sh"
-    echo
   fi
 else
   cat <<'WELCOMEBACK'
@@ -108,23 +113,25 @@ and reload it). No wallpaper picking needed this time.
 WELCOMEBACK
 fi
 
+divider
+
 # 1. Capture profiles if any are missing.
 if all_profiles_present; then
   echo "Wallpaper profiles already captured. Skipping that step."
 else
   echo "Time to capture your four Tahoe ocean wallpapers."
-  echo
   "$CONTROLS/Capture Wallpaper Profiles.command"
-  echo
   if ! all_profiles_present; then
+    echo
     echo "I didn't get all four profiles. Stopping here so nothing else changes."
     echo "Run this Install.command again whenever you're ready."
     exit 1
   fi
 fi
 
+divider
+
 # 2. Write the LaunchAgent plist using runtime $HOME/$USER (not author-side values).
-echo
 echo "Setting up the background helper..."
 write_launch_agent_plist
 reload_launch_agent
@@ -136,13 +143,15 @@ echo "Done -- it'll check the time every ${CHECK_INTERVAL_SECONDS} seconds while
 #    location until tomorrow).
 rm -f "$SUN_FILE"
 
+divider
+
 # 4. Run one immediate dispatch so the wallpaper matches the current time.
-echo
 echo "Picking the right wallpaper for right now..."
 "$SCRIPTS/aerial_dispatch.sh" || true
 
-cat <<DONE
+divider
 
+cat <<DONE
 All set!
 
 You can use any of these from the Controls folder:

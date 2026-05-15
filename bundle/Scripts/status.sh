@@ -22,12 +22,25 @@ else
 fi
 echo
 
-echo "Config (Scripts/lib/config.env):"
+echo "Effective config (shipped defaults + your overrides):"
 echo "  LAT=$LAT  LNG=$LNG  TZ=$TZ"
 echo "  Window offsets (min):"
 echo "    morning=$MORNING_OFFSET_MIN  day=$DAY_OFFSET_MIN"
 echo "    evening=$EVENING_OFFSET_MIN  night=$NIGHT_OFFSET_MIN"
 echo "  Check interval: ${CHECK_INTERVAL_SECONDS}s"
+echo
+
+if [[ -f "$USER_CONFIG" ]]; then
+  echo "Your overrides (in _Private/State/user_config.env):"
+  if grep -qE '^(LAT|LNG|TZ|LOCATION_LABEL|MORNING|DAY|EVENING|NIGHT|CHECK)' "$USER_CONFIG"; then
+    grep -E '^(LAT|LNG|TZ|LOCATION_LABEL|MORNING|DAY|EVENING|NIGHT|CHECK)' \
+      "$USER_CONFIG" | sed 's/^/  /'
+  else
+    echo "  (file exists but no override keys set)"
+  fi
+else
+  echo "Your overrides: none -- all from shipped defaults"
+fi
 echo
 
 if [[ -f "$SUN_FILE" ]]; then

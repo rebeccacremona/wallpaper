@@ -24,31 +24,34 @@ cancel this and run 'Reset Wallpaper to Default.command' first.
 
 BANNER
 
-read -r -p "Type UNINSTALL to continue (anything else cancels): " confirm
-if [[ "$confirm" != "UNINSTALL" ]]; then
+read -r -p "Continue? (y/N): " confirm
+confirm="${confirm:-N}"
+if [[ ! "$confirm" =~ ^[Yy] ]]; then
   echo
   echo "Cancelled. Nothing changed."
   exit 0
 fi
 
-echo
+divider
+
 launchctl bootout "gui/$(id -u)" "$PLIST" 2>/dev/null || true
 rm -f "$PLIST"
 echo "Removed LaunchAgent."
 
+# Move-to-Trash: use a plain `mv` rather than osascript+Finder. The
+# previous AppleScript approach used `POSIX file p as alias`, which
+# can resolve to a stale Finder alias cache (e.g., after rapid
+# rm/unzip cycles during development) and report success without
+# actually moving the live inode. `mv` is unaffected by Finder's
+# alias cache, doesn't trigger a TCC Automation prompt, and is
+# atomic when source and destination are on the same volume.
+trash_dest="$HOME/.Trash/$(basename "$BASE").uninstalled-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "$HOME/.Trash"
 echo "Moving $BASE to the Trash..."
-osascript - "$BASE" <<'APPLESCRIPT'
-on run argv
-    set p to item 1 of argv
-    tell application "Finder"
-        delete (POSIX file p as alias)
-    end tell
-end run
-APPLESCRIPT
+mv "$BASE" "$trash_dest"
 
 echo
-echo "Uninstalled. The folder was moved to the Trash."
-echo "(The Terminal window stays open so you can read this; close it when done.)"
-
-# Don't pause -- the parent BASE is gone, but Terminal handles that fine.
-trap - EXIT
+echo "Uninstalled. The folder was moved to the Trash as:"
+echo "  $(basename "$trash_dest")"
+echo "(You can recover it from Trash if needed. The Terminal window stays"
+echo "open so you can read this; close it when done.)"
